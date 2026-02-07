@@ -1,92 +1,151 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../models/shipment_model.dart';
 import '../models/user_model.dart';
+import 'api_client.dart';
 
-/// خدمة QR Scanner للاتصال بالـ Backend
+/// Response from QR operations
+class QRResponse {
+  final bool success;
+  final String? message;
+  final Shipment? shipment;
+
+  QRResponse({
+    required this.success,
+    this.message,
+    this.shipment,
+  });
+}
+
+/// Service for QR Scanner operations
 class QRService {
-  // ✅ Railway Backend URL
-  static const String baseUrl = 'https://longest-ice-production.up.railway.app/api';
+  static final QRService _instance = QRService._internal();
+  factory QRService() => _instance;
+  QRService._internal();
 
-  String? _authToken;
+  final ApiClient _apiClient = ApiClient();
 
-  void setToken(String token) {
-    _authToken = token;
-  }
+  // ==================== QR Scanning ====================
 
-  Map<String, String> get _headers => {
-    'Content-Type': 'application/json',
-    if (_authToken != null) 'Authorization': 'Bearer $_authToken',
-  };
+  /// Scan QR code for shipment
+  /// [qrData] can be tracking number or shipment ID
+  Future<QRResponse> scanShipmentQR(String qrData) async {
+    try {
+      final response = await _apiClient.post(
+        '/shipments/scan-qr',
+        body: {'qr_data': qrData},
+      );
 
-  // ==================== QR SCANNER ====================
-
-  /// مسح QR Code للشحنة
-  /// [qrData] يمكن أن يكون رقم التتبع أو معرف الشحنة
-  Future<Shipment> scanShipmentQR(String qrData) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/shipments/scan-qr'),
-      headers: _headers,
-      body: jsonEncode({'qr_data': qrData}),
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return Shipment.fromJson(data['shipment']);
-    } else if (response.statusCode == 404) {
-      throw Exception('الشحنة غير موجودة');
-    } else {
-      throw Exception('فشل في مسح QR: ${response.body}');
+      return QRResponse(
+        success: true,
+        message: response['message'] ?? 'QR scanned successfully',
+        shipment: response['data'] != null 
+            ? Shipment.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return QRResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return QRResponse(
+        success: false,
+        message: 'Failed to scan QR: $e',
+      );
     }
   }
 
-  /// الحصول على تفاصيل الشحنة بواسطة رقم التتبع
-  Future<Shipment> getShipmentByTracking(String trackingNumber) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/shipments/track/$trackingNumber'),
-      headers: _headers,
-    );
+  /// Get shipment by tracking number
+  Future<QRResponse> getShipmentByTracking(String trackingNumber) async {
+    try {
+      final response = await _apiClient.get(
+        '/shipments/track/$trackingNumber',
+      );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return Shipment.fromJson(data['shipment']);
-    } else if (response.statusCode == 404) {
-      throw Exception('الشحنة غير موجودة');
-    } else {
-      throw Exception('فشل في تحميل تفاصيل الشحنة');
+      return QRResponse(
+        success: true,
+        shipment: response['data'] != null 
+            ? Shipment.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return QRResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return QRResponse(
+        success: false,
+        message: 'Failed to get shipment: $e',
+      );
     }
   }
 
-  // ==================== ACTIONS ====================
+  /// Get shipment details by ID
+  Future<QRResponse> getShipmentById(String shipmentId) async {
+    try {
+      final response = await _apiClient.get('/shipments/$shipmentId');
 
-  /// استلام الشحنة (Pickup)
-  Future<Shipment> pickupShipment({
+      return QRResponse(
+        success: true,
+        shipment: response['data'] != null 
+            ? Shipment.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return QRResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return QRResponse(
+        success: false,
+        message: 'Failed to get shipment: $e',
+      );
+    }
+  }
+
+  // ==================== Shipment Actions ====================
+
+  /// Pickup shipment (scan at pickup)
+  Future<QRResponse> pickupShipment({
     required String shipmentId,
     required double latitude,
     required double longitude,
     String? notes,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/shipments/$shipmentId/pickup'),
-      headers: _headers,
-      body: jsonEncode({
-        'latitude': latitude,
-        'longitude': longitude,
-        'location': '$latitude,$longitude',
-        'notes': notes,
-      }),
-    );
+    try {
+      final response = await _apiClient.post(
+        '/shipments/$shipmentId/pickup',
+        body: {
+          'latitude': latitude,
+          'longitude': longitude,
+          'location': '$latitude,$longitude',
+          'notes': notes,
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return Shipment.fromJson(data['shipment']);
-    } else {
-      throw Exception('فشل في استلام الشحنة: ${response.body}');
+      return QRResponse(
+        success: true,
+        message: response['message'] ?? 'Shipment picked up successfully',
+        shipment: response['data'] != null 
+            ? Shipment.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return QRResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return QRResponse(
+        success: false,
+        message: 'Failed to pickup shipment: $e',
+      );
     }
   }
 
-  /// تسليم الشحنة (Deliver)
-  Future<Shipment> deliverShipment({
+  /// Mark shipment as delivered
+  Future<QRResponse> deliverShipment({
     required String shipmentId,
     required double latitude,
     required double longitude,
@@ -94,107 +153,143 @@ class QRService {
     String? recipientName,
     String? signatureUrl,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/shipments/$shipmentId/deliver'),
-      headers: _headers,
-      body: jsonEncode({
-        'latitude': latitude,
-        'longitude': longitude,
-        'location': '$latitude,$longitude',
-        'notes': notes,
-        'recipient_name': recipientName,
-        'signature_url': signatureUrl,
-      }),
-    );
+    try {
+      final response = await _apiClient.post(
+        '/shipments/$shipmentId/deliver',
+        body: {
+          'latitude': latitude,
+          'longitude': longitude,
+          'location': '$latitude,$longitude',
+          'notes': notes,
+          'recipient_name': recipientName,
+          'signature_url': signatureUrl,
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return Shipment.fromJson(data['shipment']);
-    } else {
-      throw Exception('فشل في تسليم الشحنة: ${response.body}');
+      return QRResponse(
+        success: true,
+        message: response['message'] ?? 'Shipment delivered successfully',
+        shipment: response['data'] != null 
+            ? Shipment.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return QRResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return QRResponse(
+        success: false,
+        message: 'Failed to deliver shipment: $e',
+      );
     }
   }
 
-  /// استرجاع الشحنة (Return)
-  Future<Shipment> returnShipment({
+  /// Return shipment
+  Future<QRResponse> returnShipment({
     required String shipmentId,
     required double latitude,
     required double longitude,
     required String reason,
     String? notes,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/shipments/$shipmentId/return'),
-      headers: _headers,
-      body: jsonEncode({
-        'latitude': latitude,
-        'longitude': longitude,
-        'location': '$latitude,$longitude',
-        'reason': reason,
-        'notes': notes,
-      }),
-    );
+    try {
+      final response = await _apiClient.post(
+        '/shipments/$shipmentId/return',
+        body: {
+          'latitude': latitude,
+          'longitude': longitude,
+          'location': '$latitude,$longitude',
+          'reason': reason,
+          'notes': notes,
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return Shipment.fromJson(data['shipment']);
-    } else {
-      throw Exception('فشل في استرجاع الشحنة: ${response.body}');
+      return QRResponse(
+        success: true,
+        message: response['message'] ?? 'Shipment returned successfully',
+        shipment: response['data'] != null 
+            ? Shipment.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return QRResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return QRResponse(
+        success: false,
+        message: 'Failed to return shipment: $e',
+      );
     }
   }
 
-  /// تحديث حالة الشحنة العامة
-  Future<Shipment> updateShipmentStatus({
+  /// Update shipment status (general)
+  Future<QRResponse> updateShipmentStatus({
     required String shipmentId,
     required String status,
     required double latitude,
     required double longitude,
     String? notes,
   }) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/shipments/$shipmentId/status'),
-      headers: _headers,
-      body: jsonEncode({
-        'status': status,
-        'latitude': latitude,
-        'longitude': longitude,
-        'location': '$latitude,$longitude',
-        'notes': notes,
-      }),
-    );
+    try {
+      final response = await _apiClient.patch(
+        '/shipments/$shipmentId/status',
+        body: {
+          'status': status,
+          'latitude': latitude,
+          'longitude': longitude,
+          'location': '$latitude,$longitude',
+          'notes': notes,
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return Shipment.fromJson(data['shipment']);
-    } else {
-      throw Exception('فشل في تحديث حالة الشحنة: ${response.body}');
+      return QRResponse(
+        success: true,
+        message: response['message'] ?? 'Status updated successfully',
+        shipment: response['data'] != null 
+            ? Shipment.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return QRResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return QRResponse(
+        success: false,
+        message: 'Failed to update status: $e',
+      );
     }
   }
 
-  // ==================== VALIDATION ====================
+  // ==================== Role Validation ====================
 
-  /// التحقق من صلاحية الإجراء للمستخدم
+  /// Check if action is valid for user role
   bool isActionValidForRole({
     required UserRole role,
     required QRAction action,
   }) {
     switch (role) {
       case UserRole.driver:
-        // السائق يمكنه: استلام، تسليم، استرجاع
+        // Driver can: pickup, deliver, return
         return action == QRAction.pickup ||
                action == QRAction.deliver ||
                action == QRAction.return_;
       case UserRole.supervisor:
       case UserRole.admin:
-        // المشرف والمدير يمكنهم: جميع الإجراءات
+        // Supervisor and admin can: all actions
         return true;
       case UserRole.client:
-        // العميل لا يمكنه استخدام ماسح QR
+        // Client cannot use QR scanner
         return false;
     }
   }
 
-  /// الحصول على قائمة الإجراءات المتاحة للدور
+  /// Get available actions for role
   List<QRAction> getAvailableActions(UserRole role) {
     switch (role) {
       case UserRole.driver:
@@ -208,7 +303,7 @@ class QRService {
   }
 }
 
-/// أنواع الإجراءات المتاحة في QR Scanner
+/// Available QR actions
 enum QRAction {
   pickup('استلام', 'Pickup', 'pickup'),
   deliver('تسليم', 'Deliver', 'deliver'),

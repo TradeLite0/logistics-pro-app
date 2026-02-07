@@ -6,7 +6,12 @@ import 'submit_complaint_screen.dart';
 
 /// شاشة قائمة الشكاوى (للمشرفين والمديرين)
 class ComplaintsListScreen extends StatefulWidget {
-  const ComplaintsListScreen({super.key});
+  final String? userId; // If provided, show only this user's complaints
+
+  const ComplaintsListScreen({
+    super.key,
+    this.userId,
+  });
 
   @override
   State<ComplaintsListScreen> createState() => _ComplaintsListScreenState();
@@ -33,21 +38,36 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
     });
 
     try {
-      final complaints = await ComplaintService().getAllComplaints(
-        status: _filterStatus,
-        priority: _filterPriority,
-      );
+      ComplaintResponse response;
+      
+      if (widget.userId != null) {
+        // Load specific user's complaints
+        response = await ComplaintService().getUserComplaints(widget.userId!);
+      } else {
+        // Load all complaints (admin view)
+        response = await ComplaintService().getAllComplaints(
+          status: _filterStatus,
+          priority: _filterPriority,
+        );
+      }
       
       if (mounted) {
-        setState(() {
-          _complaints = complaints;
-          _isLoading = false;
-        });
+        if (response.success) {
+          setState(() {
+            _complaints = response.complaints ?? [];
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _error = response.message ?? 'فشل في جلب الشكاوى';
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = 'خطأ: $e';
           _isLoading = false;
         });
       }
@@ -63,7 +83,7 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
-        title: const Text('قسم الشكاوى'),
+        title: Text(widget.userId != null ? 'شكاوى المستخدم' : 'قسم الشكاوى'),
         centerTitle: true,
         backgroundColor: const Color(0xFF2C3E50),
         foregroundColor: Colors.white,
@@ -72,13 +92,14 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
           // زر التحديث
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _refreshComplaints,
+            onPressed: _isLoading ? null : _refreshComplaints,
           ),
           // زر الفلتر
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: _showFilterDialog,
-          ),
+          if (widget.userId == null)
+            IconButton(
+              icon: const Icon(Icons.filter_list),
+              onPressed: _showFilterDialog,
+            ),
         ],
       ),
       body: Column(
@@ -97,6 +118,19 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
                         : _buildComplaintsList(),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const SubmitComplaintScreen(),
+            ),
+          ).then((_) => _loadComplaints());
+        },
+        backgroundColor: const Color(0xFF27AE60),
+        icon: const Icon(Icons.add),
+        label: const Text('شكوى جديدة'),
       ),
     );
   }
@@ -377,6 +411,19 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
               color: Colors.grey.shade600,
             ),
           ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SubmitComplaintScreen(),
+                ),
+              ).then((_) => _loadComplaints());
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('تقديم شكوى جديدة'),
+          ),
         ],
       ),
     );
@@ -401,9 +448,19 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          ElevatedButton(
+          Text(
+            _error ?? 'فشل في تحميل الشكاوى',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
             onPressed: _loadComplaints,
-            child: const Text('إعادة المحاولة'),
+            icon: const Icon(Icons.refresh),
+            label: const Text('إعادة المحاولة'),
           ),
         ],
       ),
@@ -415,61 +472,73 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('تصفية الشكاوى'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('الحالة:'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
+        content: StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                FilterChip(
-                  label: const Text('الكل'),
-                  selected: _filterStatus == null,
-                  onSelected: (selected) {
-                    if (selected) {
-                      setState(() => _filterStatus = null);
-                    }
-                  },
+                const Text('الحالة:'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('الكل'),
+                      selected: _filterStatus == null,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setDialogState(() => _filterStatus = null);
+                        }
+                      },
+                    ),
+                    ...ComplaintStatus.values.map((status) => FilterChip(
+                      label: Text(status.labelAr),
+                      selected: _filterStatus == status,
+                      onSelected: (selected) {
+                        setDialogState(() => 
+                          _filterStatus = selected ? status : null
+                        );
+                      },
+                    )),
+                  ],
                 ),
-                ...ComplaintStatus.values.map((status) => FilterChip(
-                  label: Text(status.labelAr),
-                  selected: _filterStatus == status,
-                  onSelected: (selected) {
-                    setState(() => _filterStatus = selected ? status : null);
-                  },
-                )),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Text('الأولوية:'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                FilterChip(
-                  label: const Text('الكل'),
-                  selected: _filterPriority == null,
-                  onSelected: (selected) {
-                    if (selected) {
-                      setState(() => _filterPriority = null);
-                    }
-                  },
+                const SizedBox(height: 16),
+                const Text('الأولوية:'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('الكل'),
+                      selected: _filterPriority == null,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setDialogState(() => _filterPriority = null);
+                        }
+                      },
+                    ),
+                    ...ComplaintPriority.values.map((priority) => FilterChip(
+                      label: Text(priority.labelAr),
+                      selected: _filterPriority == priority,
+                      onSelected: (selected) {
+                        setDialogState(() => 
+                          _filterPriority = selected ? priority : null
+                        );
+                      },
+                    )),
+                  ],
                 ),
-                ...ComplaintPriority.values.map((priority) => FilterChip(
-                  label: Text(priority.labelAr),
-                  selected: _filterPriority == priority,
-                  onSelected: (selected) {
-                    setState(() => _filterPriority = selected ? priority : null);
-                  },
-                )),
               ],
-            ),
-          ],
+            );
+          },
         ),
         actions: [
           TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               _loadComplaints();
@@ -487,7 +556,12 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
       MaterialPageRoute(
         builder: (_) => ComplaintDetailsScreen(complaint: complaint),
       ),
-    ).then((_) => _loadComplaints());
+    ).then((result) {
+      // Refresh if complaint was updated
+      if (result == true) {
+        _loadComplaints();
+      }
+    });
   }
 
   String _formatDate(DateTime date) {

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:geolocator/geolocator.dart';
-import '../services/qr_service.dart';
-import '../services/location_service.dart';
-import '../models/user_model.dart';
-import '../models/shipment_model.dart';
+import '../../services/qr_service.dart';
+import '../../services/location_service.dart';
+import '../../models/user_model.dart';
+import '../../models/shipment_model.dart';
 import 'scan_result_screen.dart';
 
 /// شاشة ماسح QR للسائقين والمشرفين والمديرين
@@ -148,28 +148,37 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
     try {
       // مسح الشحنة
-      final Shipment shipment = await _qrService.scanShipmentQR(qrData);
+      final response = await _qrService.scanShipmentQR(qrData);
 
       if (!mounted) return;
 
-      // الانتقال لشاشة النتائج
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ScanResultScreen(
-            shipment: shipment,
-            currentUser: widget.currentUser,
+      if (response.success && response.shipment != null) {
+        // الانتقال لشاشة النتائج
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ScanResultScreen(
+              shipment: response.shipment!,
+              currentUser: widget.currentUser,
+            ),
           ),
-        ),
-      ).then((_) {
-        // إعادة تشغيل الماسح بعد العودة
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-          _scannerController?.start();
-        }
-      });
+        ).then((_) {
+          // إعادة تشغيل الماسح بعد العودة
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+            });
+            _scannerController?.start();
+          }
+        });
+      } else {
+        // Show error
+        setState(() {
+          _isLoading = false;
+        });
+        _showError(response.message ?? 'فشل في مسح QR');
+        _scannerController?.start();
+      }
 
     } catch (e) {
       if (!mounted) return;

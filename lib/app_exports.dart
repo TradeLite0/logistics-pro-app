@@ -21,12 +21,19 @@ export 'screens/driver/driver_dashboard_screen.dart';
 // Screens - Supervisor/Admin
 export 'screens/supervisor/supervisor_dashboard_screen.dart';
 
+// Screens - Complaints
+export 'screens/complaints/complaints_list_screen.dart';
+export 'screens/complaints/complaint_details_screen.dart';
+export 'screens/complaints/submit_complaint_screen.dart';
+
 // Screens
 export 'screens/gps_lock_screen.dart';
 
 // Services
-export 'services/notification_service.dart';
-export 'services/location_service.dart';
-export 'services/api_service.dart';
-export 'services/qr_service.dart';
+export 'services/api_client.dart';
+export 'services/auth_service.dart';
 export 'services/complaint_service.dart';
+export 'services/location_service.dart';
+export 'services/notification_service.dart';
+export 'services/qr_service.dart';
+export 'services/shipment_service.dart';

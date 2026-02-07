@@ -18,12 +18,14 @@ class ComplaintDetailsScreen extends StatefulWidget {
 class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
   final _responseController = TextEditingController();
   bool _isUpdating = false;
+  bool _isLoading = false;
   late Complaint _complaint;
 
   @override
   void initState() {
     super.initState();
     _complaint = widget.complaint;
+    _refreshComplaintDetails();
   }
 
   @override
@@ -32,11 +34,31 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
     super.dispose();
   }
 
+  Future<void> _refreshComplaintDetails() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await ComplaintService().getComplaintById(_complaint.id);
+      
+      if (mounted && response.success && response.complaint != null) {
+        setState(() {
+          _complaint = response.complaint!;
+        });
+      }
+    } catch (e) {
+      // Silent error - keep existing data
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   Future<void> _updateStatus(ComplaintStatus newStatus) async {
     setState(() => _isUpdating = true);
 
     try {
-      final updated = await ComplaintService().updateComplaintStatus(
+      final response = await ComplaintService().updateComplaintStatus(
         complaintId: _complaint.id,
         status: newStatus,
         adminResponse: _responseController.text.trim().isNotEmpty
@@ -44,9 +66,11 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
             : null,
       );
 
-      if (mounted) {
+      if (!mounted) return;
+
+      if (response.success && response.complaint != null) {
         setState(() {
-          _complaint = updated;
+          _complaint = response.complaint!;
           _isUpdating = false;
         });
 
@@ -56,16 +80,17 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
             backgroundColor: Colors.green,
           ),
         );
+        
+        // Return true to indicate update
+        Navigator.pop(context, true);
+      } else {
+        setState(() => _isUpdating = false);
+        _showError(response.message ?? 'فشل في تحديث الحالة');
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isUpdating = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showError('خطأ: $e');
       }
     }
   }
@@ -76,14 +101,16 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
     setState(() => _isUpdating = true);
 
     try {
-      final updated = await ComplaintService().addAdminResponse(
+      final response = await ComplaintService().addAdminResponse(
         complaintId: _complaint.id,
         response: _responseController.text.trim(),
       );
 
-      if (mounted) {
+      if (!mounted) return;
+
+      if (response.success && response.complaint != null) {
         setState(() {
-          _complaint = updated;
+          _complaint = response.complaint!;
           _isUpdating = false;
         });
         _responseController.clear();
@@ -94,18 +121,26 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
             backgroundColor: Colors.green,
           ),
         );
+      } else {
+        setState(() => _isUpdating = false);
+        _showError(response.message ?? 'فشل في إضافة الرد');
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isUpdating = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showError('خطأ: $e');
       }
     }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -118,6 +153,21 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
         backgroundColor: const Color(0xFF2C3E50),
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: _isLoading 
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : const Icon(Icons.refresh),
+            onPressed: _isLoading ? null : _refreshComplaintDetails,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -386,12 +436,12 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
               child: ElevatedButton.icon(
                 onPressed: _isUpdating ? null : _submitResponse,
                 icon: _isUpdating
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send),
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send),
                 label: const Text('إرسال الرد'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF3498DB),
@@ -423,28 +473,34 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: ComplaintStatus.values.map((status) {
-                final isCurrent = _complaint.status == status;
-                return ElevatedButton.icon(
-                  onPressed: isCurrent || _isUpdating
-                      ? null
-                      : () => _updateStatus(status),
-                  icon: Icon(_getStatusIcon(status)),
-                  label: Text(status.labelAr),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isCurrent
-                        ? _getStatusColor(status)
-                        : Colors.grey.shade200,
-                    foregroundColor: isCurrent ? Colors.white : Colors.black87,
-                    disabledBackgroundColor: _getStatusColor(status),
-                    disabledForegroundColor: Colors.white,
-                  ),
-                );
-              }).toList(),
-            ),
+            if (_isUpdating)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: ComplaintStatus.values.map((status) {
+                  final isCurrent = _complaint.status == status;
+                  return ElevatedButton.icon(
+                    onPressed: isCurrent ? null : () => _updateStatus(status),
+                    icon: Icon(_getStatusIcon(status)),
+                    label: Text(status.labelAr),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isCurrent
+                          ? _getStatusColor(status)
+                          : Colors.grey.shade200,
+                      foregroundColor: isCurrent ? Colors.white : Colors.black87,
+                      disabledBackgroundColor: _getStatusColor(status),
+                      disabledForegroundColor: Colors.white,
+                    ),
+                  );
+                }).toList(),
+              ),
           ],
         ),
       ),

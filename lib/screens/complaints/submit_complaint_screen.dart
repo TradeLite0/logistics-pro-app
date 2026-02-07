@@ -47,7 +47,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final complaint = await ComplaintService().submitComplaint(
+      final response = await ComplaintService().submitComplaint(
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         type: _selectedType,
@@ -57,29 +57,45 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             : null,
       );
 
-      if (mounted) {
+      if (!mounted) return;
+
+      if (response.success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('تم إرسال الشكوى بنجاح'),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context, complaint);
+        Navigator.pop(context, response.complaint);
+      } else {
+        _showError(response.message ?? 'فشل في إرسال الشكوى');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showError('خطأ: $e');
       }
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'حسناً',
+          textColor: Colors.white,
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          },
+        ),
+      ),
+    );
   }
 
   @override

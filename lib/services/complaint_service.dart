@@ -1,18 +1,33 @@
-import 'dart:convert';
-import 'dart:io';
-import 'package:http/http.dart' as http;
 import '../models/complaint_model.dart';
+import 'api_client.dart';
 
-/// خدمة إدارة الشكاوى
+/// Response from complaint operations
+class ComplaintResponse {
+  final bool success;
+  final String? message;
+  final Complaint? complaint;
+  final List<Complaint>? complaints;
+
+  ComplaintResponse({
+    required this.success,
+    this.message,
+    this.complaint,
+    this.complaints,
+  });
+}
+
+/// Service for managing complaints
 class ComplaintService {
-  static const String baseUrl = 'https://longest-ice-production.up.railway.app/api';
-  
   static final ComplaintService _instance = ComplaintService._internal();
   factory ComplaintService() => _instance;
   ComplaintService._internal();
 
-  /// تقديم شكوى جديدة
-  Future<Complaint> submitComplaint({
+  final ApiClient _apiClient = ApiClient();
+
+  // ==================== Create & Submit ====================
+
+  /// Submit a new complaint
+  Future<ComplaintResponse> submitComplaint({
     required String title,
     required String description,
     required ComplaintType type,
@@ -21,240 +36,286 @@ class ComplaintService {
     List<String>? images,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/complaints'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+      final response = await _apiClient.post(
+        '/complaints',
+        body: {
           'title': title,
           'description': description,
           'type': type.key,
           'priority': priority.key,
           'shipment_tracking_number': shipmentTrackingNumber,
           'images': images,
-        }),
+        },
       );
 
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return Complaint.fromJson(data['data'] ?? data);
-      } else {
-        throw Exception('فشل في إرسال الشكوى: ${response.statusCode}');
-      }
+      return ComplaintResponse(
+        success: true,
+        message: response['message'] ?? 'Complaint submitted successfully',
+        complaint: response['data'] != null 
+            ? Complaint.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: e.message,
+      );
     } catch (e) {
-      // للاختبار - إرجاع شكوى وهمية
-      return Complaint(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        userId: 'test_user',
-        userName: 'مستخدم تجريبي',
-        userPhone: '+966501234567',
-        title: title,
-        description: description,
-        type: type,
-        priority: priority,
-        status: ComplaintStatus.pending,
-        shipmentTrackingNumber: shipmentTrackingNumber,
-        images: images,
-        createdAt: DateTime.now(),
+      return ComplaintResponse(
+        success: false,
+        message: 'Failed to submit complaint: $e',
       );
     }
   }
 
-  /// جلب جميع الشكاوى (للمشرفين)
-  Future<List<Complaint>> getAllComplaints({
+  // ==================== Get Complaints ====================
+
+  /// Get all complaints (for admins/supervisors)
+  Future<ComplaintResponse> getAllComplaints({
     ComplaintStatus? status,
     ComplaintPriority? priority,
+    int page = 1,
+    int limit = 20,
   }) async {
     try {
-      String url = '$baseUrl/complaints';
-      
-      // إضافة parameters للفلترة
-      final queryParams = <String, String>{};
-      if (status != null) queryParams['status'] = status.key;
-      if (priority != null) queryParams['priority'] = priority.key;
-      
-      if (queryParams.isNotEmpty) {
-        url += '?' + queryParams.entries
-            .map((e) => '${e.key}=${e.value}')
-            .join('&');
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+
+      if (status != null) {
+        queryParams['status'] = status.key;
+      }
+      if (priority != null) {
+        queryParams['priority'] = priority.key;
       }
 
-      final response = await http.get(Uri.parse(url));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List<dynamic> complaints = data['data'] ?? data;
-        return complaints.map((c) => Complaint.fromJson(c)).toList();
-      } else {
-        throw Exception('فشل في جلب الشكاوى: ${response.statusCode}');
-      }
-    } catch (e) {
-      // للاختبار - إرجاع شكاوى وهمية
-      return _getMockComplaints();
-    }
-  }
-
-  /// جلب شكاوى مستخدم معين
-  Future<List<Complaint>> getUserComplaints(String userId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/complaints/user/$userId'),
+      final response = await _apiClient.get(
+        '/complaints',
+        queryParams: queryParams,
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List<dynamic> complaints = data['data'] ?? data;
-        return complaints.map((c) => Complaint.fromJson(c)).toList();
-      } else {
-        throw Exception('فشل في جلب شكاوى المستخدم: ${response.statusCode}');
-      }
-    } catch (e) {
-      return [];
-    }
-  }
+      final List<dynamic> data = response['data'] ?? [];
+      final complaints = data.map((c) => Complaint.fromJson(c)).toList();
 
-  /// جلب تفاصيل شكوى
-  Future<Complaint> getComplaintById(String complaintId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/complaints/$complaintId'),
+      return ComplaintResponse(
+        success: true,
+        complaints: complaints,
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return Complaint.fromJson(data['data'] ?? data);
-      } else {
-        throw Exception('فشل في جلب تفاصيل الشكوى: ${response.statusCode}');
-      }
+    } on ApiException catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: e.message,
+      );
     } catch (e) {
-      throw Exception('خطأ: $e');
+      return ComplaintResponse(
+        success: false,
+        message: 'Failed to load complaints: $e',
+      );
     }
   }
 
-  /// تحديث حالة الشكوى
-  Future<Complaint> updateComplaintStatus({
+  /// Get complaints for a specific user
+  Future<ComplaintResponse> getUserComplaints(String userId) async {
+    try {
+      final response = await _apiClient.get('/complaints/user/$userId');
+
+      final List<dynamic> data = response['data'] ?? [];
+      final complaints = data.map((c) => Complaint.fromJson(c)).toList();
+
+      return ComplaintResponse(
+        success: true,
+        complaints: complaints,
+      );
+    } on ApiException catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: 'Failed to load user complaints: $e',
+      );
+    }
+  }
+
+  /// Get my complaints (for current logged-in user)
+  Future<ComplaintResponse> getMyComplaints() async {
+    try {
+      final response = await _apiClient.get('/complaints/my');
+
+      final List<dynamic> data = response['data'] ?? [];
+      final complaints = data.map((c) => Complaint.fromJson(c)).toList();
+
+      return ComplaintResponse(
+        success: true,
+        complaints: complaints,
+      );
+    } on ApiException catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: 'Failed to load complaints: $e',
+      );
+    }
+  }
+
+  /// Get complaint details by ID
+  Future<ComplaintResponse> getComplaintById(String complaintId) async {
+    try {
+      final response = await _apiClient.get('/complaints/$complaintId');
+
+      return ComplaintResponse(
+        success: true,
+        complaint: response['data'] != null 
+            ? Complaint.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: 'Failed to load complaint details: $e',
+      );
+    }
+  }
+
+  // ==================== Update ====================
+
+  /// Update complaint status (admin/supervisor only)
+  Future<ComplaintResponse> updateComplaintStatus({
     required String complaintId,
     required ComplaintStatus status,
     String? adminResponse,
   }) async {
     try {
-      final response = await http.patch(
-        Uri.parse('$baseUrl/complaints/$complaintId/status'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+      final response = await _apiClient.patch(
+        '/complaints/$complaintId/status',
+        body: {
           'status': status.key,
-          'admin_response': adminResponse,
-        }),
+          if (adminResponse != null) 'admin_response': adminResponse,
+        },
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return Complaint.fromJson(data['data'] ?? data);
-      } else {
-        throw Exception('فشل في تحديث الحالة: ${response.statusCode}');
-      }
+      return ComplaintResponse(
+        success: true,
+        message: response['message'] ?? 'Status updated successfully',
+        complaint: response['data'] != null 
+            ? Complaint.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: e.message,
+      );
     } catch (e) {
-      // للاختبار - تحديث محلي
-      return Complaint(
-        id: complaintId,
-        userId: 'test_user',
-        userName: 'مستخدم تجريبي',
-        userPhone: '+966501234567',
-        title: 'شكوى تجريبية',
-        description: 'وصف تجريبي',
-        type: ComplaintType.other,
-        priority: ComplaintPriority.medium,
-        status: status,
-        createdAt: DateTime.now(),
-        adminResponse: adminResponse,
+      return ComplaintResponse(
+        success: false,
+        message: 'Failed to update status: $e',
       );
     }
   }
 
-  /// إضافة رد من المشرف
-  Future<Complaint> addAdminResponse({
+  /// Add admin response to complaint
+  Future<ComplaintResponse> addAdminResponse({
     required String complaintId,
     required String response,
   }) async {
     try {
-      final res = await http.post(
-        Uri.parse('$baseUrl/complaints/$complaintId/response'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'response': response}),
+      final apiResponse = await _apiClient.post(
+        '/complaints/$complaintId/response',
+        body: {'response': response},
       );
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        return Complaint.fromJson(data['data'] ?? data);
-      } else {
-        throw Exception('فشل في إضافة الرد: ${res.statusCode}');
-      }
+      return ComplaintResponse(
+        success: true,
+        message: apiResponse['message'] ?? 'Response added successfully',
+        complaint: apiResponse['data'] != null 
+            ? Complaint.fromJson(apiResponse['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: e.message,
+      );
     } catch (e) {
-      // للاختبار
-      return Complaint(
-        id: complaintId,
-        userId: 'test_user',
-        userName: 'مستخدم تجريبي',
-        userPhone: '+966501234567',
-        title: 'شكوى تجريبية',
-        description: 'وصف تجريبي',
-        type: ComplaintType.other,
-        priority: ComplaintPriority.medium,
-        status: ComplaintStatus.inProgress,
-        adminResponse: response,
-        adminName: 'المشرف',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+      return ComplaintResponse(
+        success: false,
+        message: 'Failed to add response: $e',
       );
     }
   }
 
-  /// شكاوى وهمية للاختبار
-  List<Complaint> _getMockComplaints() {
-    return [
-      Complaint(
-        id: '1',
-        userId: 'user1',
-        userName: 'أحمد محمد',
-        userPhone: '+966501234567',
-        title: 'تأخير في توصيل الشحنة',
-        description: 'الشحنة متأخرة عن موعد التسليم بـ 3 أيام ولم يتم الرد على الاستفسارات.',
-        type: ComplaintType.shipmentIssue,
-        priority: ComplaintPriority.high,
-        status: ComplaintStatus.pending,
-        shipmentTrackingNumber: 'SH123456',
-        createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      Complaint(
-        id: '2',
-        userId: 'user2',
-        userName: 'فاطمة علي',
-        userPhone: '+966509876543',
-        title: 'مشكلة في تطبيق الجوال',
-        description: 'التطبيق يتوقف فجأة عند محاولة تتبع الشحنة.',
-        type: ComplaintType.appIssue,
-        priority: ComplaintPriority.medium,
-        status: ComplaintStatus.inProgress,
-        adminResponse: 'نعمل على حل المشكلة، سيتم إصلاحها في التحديث القادم.',
-        adminName: 'خالد المشرف',
-        createdAt: DateTime.now().subtract(const Duration(days: 5)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      Complaint(
-        id: '3',
-        userId: 'user3',
-        userName: 'محمد عبدالله',
-        userPhone: '+966505556677',
-        title: 'السائق لم يرد على الاتصال',
-        description: 'حاولت الاتصال بالسائق أكثر من 5 مرات ولم يرد.',
-        type: ComplaintType.driverIssue,
-        priority: ComplaintPriority.urgent,
-        status: ComplaintStatus.resolved,
-        shipmentTrackingNumber: 'SH789012',
-        adminResponse: 'تم التواصل مع السائق وحل المشكلة، تم تسليم الشحنة.',
-        adminName: 'سارة المشرفة',
-        createdAt: DateTime.now().subtract(const Duration(days: 3)),
-        resolvedAt: DateTime.now().subtract(const Duration(hours: 5)),
-      ),
-    ];
+  /// Update complaint (for owner)
+  Future<ComplaintResponse> updateComplaint({
+    required String complaintId,
+    String? title,
+    String? description,
+    ComplaintPriority? priority,
+  }) async {
+    try {
+      final body = <String, dynamic>{};
+      if (title != null) body['title'] = title;
+      if (description != null) body['description'] = description;
+      if (priority != null) body['priority'] = priority.key;
+
+      final response = await _apiClient.put(
+        '/complaints/$complaintId',
+        body: body,
+      );
+
+      return ComplaintResponse(
+        success: true,
+        message: response['message'] ?? 'Complaint updated successfully',
+        complaint: response['data'] != null 
+            ? Complaint.fromJson(response['data']) 
+            : null,
+      );
+    } on ApiException catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: 'Failed to update complaint: $e',
+      );
+    }
+  }
+
+  // ==================== Delete ====================
+
+  /// Delete complaint
+  Future<ComplaintResponse> deleteComplaint(String complaintId) async {
+    try {
+      final response = await _apiClient.delete('/complaints/$complaintId');
+
+      return ComplaintResponse(
+        success: true,
+        message: response['message'] ?? 'Complaint deleted successfully',
+      );
+    } on ApiException catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: e.message,
+      );
+    } catch (e) {
+      return ComplaintResponse(
+        success: false,
+        message: 'Failed to delete complaint: $e',
+      );
+    }
   }
 }
