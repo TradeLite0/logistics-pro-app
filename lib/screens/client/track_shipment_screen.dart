@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/shipment_model.dart';
+import 'track_shipment_map_screen.dart';
 
 /// شاشة تتبع الشحنة - واجهة العميل
 class ClientTrackScreen extends StatefulWidget {
@@ -349,7 +350,39 @@ class _ClientTrackScreenState extends State<ClientTrackScreen> {
                   ),
                 ),
               ),
-              const Icon(Icons.local_shipping, color: Colors.white, size: 32),
+              Row(
+                children: [
+                  // زر عرض الخريطة
+                  InkWell(
+                    onTap: () => _openMapView(),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withOpacity(0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.map, color: Colors.white, size: 18),
+                          SizedBox(width: 6),
+                          Text(
+                            'عرض الخريطة',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Icon(Icons.local_shipping, color: Colors.white, size: 32),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -367,11 +400,14 @@ class _ClientTrackScreenState extends State<ClientTrackScreen> {
               children: [
                 const Icon(Icons.location_on, color: Colors.white70, size: 18),
                 const SizedBox(width: 8),
-                Text(
-                  _shipment!.currentLocation!,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
+                Expanded(
+                  child: Text(
+                    _shipment!.currentLocation!,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -385,6 +421,16 @@ class _ClientTrackScreenState extends State<ClientTrackScreen> {
             borderRadius: BorderRadius.circular(3),
           ),
         ],
+      ),
+    );
+  }
+
+  /// فتح شاشة الخريطة
+  void _openMapView() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TrackShipmentMapScreen(shipment: _shipment!),
       ),
     );
   }
@@ -566,24 +612,93 @@ class _ClientTrackScreenState extends State<ClientTrackScreen> {
             children: [
               const Icon(Icons.person, color: Color(0xFF4CAF50)),
               const SizedBox(width: 8),
-              Text(
-                'مندوب التوصيل',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+              Expanded(
+                child: Text(
+                  'مندوب التوصيل',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ),
+              // زر تتبع الموقع
+              InkWell(
+                onTap: () => _openMapView(),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4CAF50),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.my_location, color: Colors.white, size: 16),
+                      SizedBox(width: 4),
+                      Text(
+                        'تتبع',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(_shipment!.driverName!, style: const TextStyle(fontSize: 16)),
-          if (_shipment!.driverPhone != null)
-            TextButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.phone, size: 18),
-              label: Text(_shipment!.driverPhone!),
-            ),
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4CAF50).withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.local_shipping,
+                  color: Color(0xFF4CAF50),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _shipment!.driverName!,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (_shipment!.driverPhone != null)
+                      Text(
+                        _shipment!.driverPhone!,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (_shipment!.driverPhone != null)
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(Icons.phone, color: Color(0xFF4CAF50)),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white,
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
