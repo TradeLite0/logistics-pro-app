@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'screens/shipments/my_shipments_screen.dart';
-import 'screens/shipments/driver_shipments_screen.dart';
-import 'screens/chat/chat_list_screen.dart';
-import 'screens/notifications/notifications_screen.dart';
-import 'screens/profile/profile_screen.dart';
+import 'shipments/my_shipments_screen.dart';
+import 'shipments/driver_shipments_screen.dart';
+import 'chat/chat_list_screen.dart';
+import 'notifications/notifications_screen.dart';
+import 'profile/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,7 +14,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  bool isDriver = false; // TODO: Get from user data
+  bool isDriver = false;
 
   @override
   Widget build(BuildContext context) {
