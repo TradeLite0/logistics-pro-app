@@ -1,81 +1,48 @@
-/// أنواع المستخدمين
-enum UserRole {
-  client('عميل', 'Client', 'client'),
-  driver('سائق', 'Driver', 'driver'),
-  supervisor('مشرف', 'Supervisor', 'supervisor'),
-  admin('مدير', 'Admin', 'admin');
+import 'package:flutter/foundation.dart';
 
-  final String labelAr;
-  final String labelEn;
-  final String key;
-
-  const UserRole(this.labelAr, this.labelEn, this.key);
-
-  String getLabel(bool isArabic) => isArabic ? labelAr : labelEn;
-
-  static UserRole fromKey(String? key) {
-    if (key == null) return UserRole.client;
-    return UserRole.values.firstWhere(
-      (r) => r.key == key.toLowerCase(),
-      orElse: () => UserRole.client,
-    );
-  }
-
-  /// التحقق إذا كان المستخدم يمكنه استخدام ماسح QR
-  bool get canUseQRScanner => 
-      this == UserRole.driver || 
-      this == UserRole.supervisor || 
-      this == UserRole.admin;
-
-  /// التحقق إذا كان المستخدم يمكنه رؤية تفاصيل إضافية
-  bool get canViewDetails => 
-      this == UserRole.supervisor || 
-      this == UserRole.admin;
-
-  /// التحقق إذا كان المستخدم يمكنه تنفيذ جميع الإجراءات
-  bool get canPerformAllActions => 
-      this == UserRole.supervisor || 
-      this == UserRole.admin;
-}
-
-/// نموذج المستخدم
-class User {
+class UserModel {
   final String id;
   final String name;
+  final String email;
   final String phone;
-  final String? email;
-  final UserRole role;
-  final String? token;
-  final String? fcmToken;
+  final String? avatar;
+  final String role;
+  final bool isActive;
+  final DateTime? emailVerifiedAt;
   final DateTime createdAt;
   final DateTime? updatedAt;
-  final bool isActive;
 
-  User({
+  UserModel({
     required this.id,
     required this.name,
+    required this.email,
     required this.phone,
-    this.email,
+    this.avatar,
     required this.role,
-    this.token,
-    this.fcmToken,
+    this.isActive = true,
+    this.emailVerifiedAt,
     required this.createdAt,
     this.updatedAt,
-    this.isActive = true,
   });
 
-  factory User.fromJson(Map<String, dynamic> json) {
-    return User(
+  factory UserModel.fromJson(Map<String, dynamic> json) {
+    return UserModel(
       id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
+      email: json['email'] ?? '',
       phone: json['phone'] ?? '',
-      email: json['email'],
-      role: UserRole.fromKey(json['type'] ?? json['role']),
-      token: json['token'],
-      fcmToken: json['fcm_token'] ?? json['fcmToken'],
-      createdAt: DateTime.tryParse(json['created_at'] ?? json['createdAt'] ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updated_at'] ?? json['updatedAt'] ?? ''),
-      isActive: json['is_active'] ?? json['isActive'] ?? true,
+      avatar: json['avatar'],
+      role: json['role'] ?? 'client',
+      isActive: json['isActive'] ?? true,
+      emailVerifiedAt: json['emailVerifiedAt'] != null
+          ? DateTime.parse(json['emailVerifiedAt'])
+          : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : null,
     );
   }
 
@@ -83,38 +50,84 @@ class User {
     return {
       'id': id,
       'name': name,
-      'phone': phone,
       'email': email,
-      'type': role.key,
-      'token': token,
-      'fcm_token': fcmToken,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
-      'is_active': isActive,
+      'phone': phone,
+      'avatar': avatar,
+      'role': role,
+      'isActive': isActive,
+      'emailVerifiedAt': emailVerifiedAt?.toIso8601String(),
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt?.toIso8601String(),
     };
   }
 
-  User copyWith({
+  UserModel copyWith({
+    String? id,
     String? name,
-    String? phone,
     String? email,
-    UserRole? role,
-    String? token,
-    String? fcmToken,
-    DateTime? updatedAt,
+    String? phone,
+    String? avatar,
+    String? role,
     bool? isActive,
+    DateTime? emailVerifiedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
-    return User(
-      id: id,
+    return UserModel(
+      id: id ?? this.id,
       name: name ?? this.name,
-      phone: phone ?? this.phone,
       email: email ?? this.email,
+      phone: phone ?? this.phone,
+      avatar: avatar ?? this.avatar,
       role: role ?? this.role,
-      token: token ?? this.token,
-      fcmToken: fcmToken ?? this.fcmToken,
-      createdAt: createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
       isActive: isActive ?? this.isActive,
+      emailVerifiedAt: emailVerifiedAt ?? this.emailVerifiedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+
+  bool get isClient => role == 'client';
+  bool get isDriver => role == 'driver';
+  bool get isAdmin => role == 'admin';
+}
+
+class UserProfileUpdateRequest {
+  final String? name;
+  final String? phone;
+  final String? email;
+
+  UserProfileUpdateRequest({
+    this.name,
+    this.phone,
+    this.email,
+  });
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = {};
+    if (name != null) data['name'] = name;
+    if (phone != null) data['phone'] = phone;
+    if (email != null) data['email'] = email;
+    return data;
+  }
+}
+
+class ChangePasswordRequest {
+  final String currentPassword;
+  final String newPassword;
+  final String confirmPassword;
+
+  ChangePasswordRequest({
+    required this.currentPassword,
+    required this.newPassword,
+    required this.confirmPassword,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'currentPassword': currentPassword,
+      'newPassword': newPassword,
+      'confirmPassword': confirmPassword,
+    };
   }
 }

@@ -1,480 +1,175 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/shipment_model.dart';
-import 'api_client.dart';
+import '../utils/constants.dart';
 
-/// Response from shipment operations
-class ShipmentResponse {
-  final bool success;
-  final String? message;
-  final Shipment? shipment;
-  final List<Shipment>? shipments;
-  final Map<String, dynamic>? trackingInfo;
-  final Map<String, dynamic>? driverLocation;
-
-  ShipmentResponse({
-    required this.success,
-    this.message,
-    this.shipment,
-    this.shipments,
-    this.trackingInfo,
-    this.driverLocation,
-  });
-}
-
-/// Service for shipment operations and tracking
 class ShipmentService {
   static final ShipmentService _instance = ShipmentService._internal();
   factory ShipmentService() => _instance;
   ShipmentService._internal();
 
-  final ApiClient _apiClient = ApiClient();
+  Future<Map<String, String>> _getHeaders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
 
-  // ==================== List Shipments ====================
-
-  /// Get all shipments
-  Future<ShipmentResponse> getShipments({
+  Future<List<ShipmentModel>> getMyShipments({
     String? status,
-    String? driverId,
-    String? companyId,
-    DateTime? fromDate,
-    DateTime? toDate,
+    String? search,
     int page = 1,
     int limit = 20,
   }) async {
     try {
+      final headers = await _getHeaders();
+      
       final queryParams = <String, String>{
         'page': page.toString(),
         'limit': limit.toString(),
       };
+      
+      if (status != null && status.isNotEmpty) {
+        queryParams['status'] = status;
+      }
+      if (search != null && search.isNotEmpty) {
+        queryParams['search'] = search;
+      }
 
-      if (status != null) queryParams['status'] = status;
-      if (driverId != null) queryParams['driver_id'] = driverId;
-      if (companyId != null) queryParams['company_id'] = companyId;
-      if (fromDate != null) queryParams['from'] = fromDate.toIso8601String();
-      if (toDate != null) queryParams['to'] = toDate.toIso8601String();
+      final uri = Uri.parse('${AppConstants.apiBaseUrl}/shipments/my')
+          .replace(queryParameters: queryParams);
 
-      final response = await _apiClient.get(
-        '/shipments',
-        queryParams: queryParams,
-      );
+      final response = await http.get(uri, headers: headers);
 
-      final List<dynamic> data = response['data'] ?? [];
-      final shipments = data.map((s) => Shipment.fromJson(s)).toList();
-
-      return ShipmentResponse(
-        success: true,
-        shipments: shipments,
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final shipments = (data['shipments'] ?? data['data'] ?? []) as List;
+        return shipments.map((s) => ShipmentModel.fromJson(s)).toList();
+      } else {
+        throw Exception('Failed to load shipments: ${response.statusCode}');
+      }
     } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to load shipments: $e',
-      );
+      throw Exception('Error fetching shipments: $e');
     }
   }
 
-  /// Get shipments assigned to current driver
-  Future<ShipmentResponse> getDriverShipments({
+  Future<List<ShipmentModel>> getDriverShipments({
     String? status,
+    String? search,
     int page = 1,
     int limit = 20,
   }) async {
     try {
+      final headers = await _getHeaders();
+      
       final queryParams = <String, String>{
         'page': page.toString(),
         'limit': limit.toString(),
       };
+      
+      if (status != null && status.isNotEmpty) {
+        queryParams['status'] = status;
+      }
+      if (search != null && search.isNotEmpty) {
+        queryParams['search'] = search;
+      }
 
-      if (status != null) queryParams['status'] = status;
+      final uri = Uri.parse('${AppConstants.apiBaseUrl}/shipments/driver')
+          .replace(queryParameters: queryParams);
 
-      final response = await _apiClient.get(
-        '/shipments/driver/my',
-        queryParams: queryParams,
-      );
+      final response = await http.get(uri, headers: headers);
 
-      final List<dynamic> data = response['data'] ?? [];
-      final shipments = data.map((s) => Shipment.fromJson(s)).toList();
-
-      return ShipmentResponse(
-        success: true,
-        shipments: shipments,
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final shipments = (data['shipments'] ?? data['data'] ?? []) as List;
+        return shipments.map((s) => ShipmentModel.fromJson(s)).toList();
+      } else {
+        throw Exception('Failed to load shipments: ${response.statusCode}');
+      }
     } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to load driver shipments: $e',
-      );
+      throw Exception('Error fetching driver shipments: $e');
     }
   }
 
-  /// Get shipments for a specific client
-  Future<ShipmentResponse> getClientShipments(String clientId) async {
+  Future<ShipmentModel> getShipmentDetails(String id) async {
     try {
-      final response = await _apiClient.get('/shipments/client/$clientId');
-
-      final List<dynamic> data = response['data'] ?? [];
-      final shipments = data.map((s) => Shipment.fromJson(s)).toList();
-
-      return ShipmentResponse(
-        success: true,
-        shipments: shipments,
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('${AppConstants.apiBaseUrl}/shipments/$id'),
+        headers: headers,
       );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return ShipmentModel.fromJson(data['shipment'] ?? data);
+      } else {
+        throw Exception('Failed to load shipment details: ${response.statusCode}');
+      }
     } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to load client shipments: $e',
-      );
+      throw Exception('Error fetching shipment details: $e');
     }
   }
 
-  // ==================== Shipment Details ====================
-
-  /// Get shipment by ID
-  Future<ShipmentResponse> getShipment(String shipmentId) async {
+  Future<ShipmentModel> createShipment(Map<String, dynamic> shipmentData) async {
     try {
-      final response = await _apiClient.get('/shipments/$shipmentId');
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('${AppConstants.apiBaseUrl}/shipments'),
+        headers: headers,
+        body: jsonEncode(shipmentData),
+      );
 
-      return ShipmentResponse(
-        success: true,
-        shipment: response['data'] != null 
-            ? Shipment.fromJson(response['data']) 
-            : null,
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return ShipmentModel.fromJson(data['shipment'] ?? data);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Failed to create shipment');
+      }
     } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to load shipment: $e',
-      );
+      throw Exception('Error creating shipment: $e');
     }
   }
 
-  /// Track shipment by tracking number
-  Future<ShipmentResponse> trackShipment(String trackingNumber) async {
+  Future<void> updateShipmentStatus(String id, String status) async {
     try {
-      final response = await _apiClient.get(
-        '/shipments/$trackingNumber/track',
+      final headers = await _getHeaders();
+      final response = await http.patch(
+        Uri.parse('${AppConstants.apiBaseUrl}/shipments/$id/status'),
+        headers: headers,
+        body: jsonEncode({'status': status}),
       );
 
-      return ShipmentResponse(
-        success: true,
-        trackingInfo: response['data'],
-        shipment: response['data'] != null && response['data']['shipment'] != null
-            ? Shipment.fromJson(response['data']['shipment'])
-            : null,
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
+      if (response.statusCode != 200) {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Failed to update status');
+      }
     } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to track shipment: $e',
-      );
+      throw Exception('Error updating shipment status: $e');
     }
   }
 
-  // ==================== Create & Update ====================
-
-  /// Create new shipment
-  Future<ShipmentResponse> createShipment({
-    required String customerName,
-    required String customerPhone,
-    String? customerEmail,
-    required String origin,
-    required String destination,
-    required String serviceType,
-    required double weight,
-    required double cost,
-    String? notes,
-    String? companyId,
-  }) async {
+  Future<ShipmentModel?> trackShipment(String trackingNumber) async {
     try {
-      final response = await _apiClient.post(
-        '/shipments',
-        body: {
-          'customer_name': customerName,
-          'customer_phone': customerPhone,
-          'customer_email': customerEmail,
-          'origin': origin,
-          'destination': destination,
-          'service_type': serviceType,
-          'weight': weight,
-          'cost': cost,
-          'notes': notes,
-          'company_id': companyId,
-        },
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('${AppConstants.apiBaseUrl}/shipments/track/$trackingNumber'),
+        headers: headers,
       );
 
-      return ShipmentResponse(
-        success: true,
-        message: response['message'] ?? 'Shipment created successfully',
-        shipment: response['data'] != null 
-            ? Shipment.fromJson(response['data']) 
-            : null,
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return ShipmentModel.fromJson(data['shipment'] ?? data);
+      } else if (response.statusCode == 404) {
+        return null;
+      } else {
+        throw Exception('Failed to track shipment: ${response.statusCode}');
+      }
     } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to create shipment: $e',
-      );
-    }
-  }
-
-  /// Update shipment
-  Future<ShipmentResponse> updateShipment({
-    required String shipmentId,
-    String? customerName,
-    String? customerPhone,
-    String? customerEmail,
-    String? origin,
-    String? destination,
-    String? serviceType,
-    double? weight,
-    double? cost,
-    String? notes,
-  }) async {
-    try {
-      final body = <String, dynamic>{};
-      if (customerName != null) body['customer_name'] = customerName;
-      if (customerPhone != null) body['customer_phone'] = customerPhone;
-      if (customerEmail != null) body['customer_email'] = customerEmail;
-      if (origin != null) body['origin'] = origin;
-      if (destination != null) body['destination'] = destination;
-      if (serviceType != null) body['service_type'] = serviceType;
-      if (weight != null) body['weight'] = weight;
-      if (cost != null) body['cost'] = cost;
-      if (notes != null) body['notes'] = notes;
-
-      final response = await _apiClient.put(
-        '/shipments/$shipmentId',
-        body: body,
-      );
-
-      return ShipmentResponse(
-        success: true,
-        message: response['message'] ?? 'Shipment updated successfully',
-        shipment: response['data'] != null 
-            ? Shipment.fromJson(response['data']) 
-            : null,
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
-    } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to update shipment: $e',
-      );
-    }
-  }
-
-  /// Update shipment status with location
-  Future<ShipmentResponse> updateStatus({
-    required String shipmentId,
-    required ShipmentStatus status,
-    String? location,
-    String? notes,
-    double? latitude,
-    double? longitude,
-  }) async {
-    try {
-      final body = <String, dynamic>{
-        'status': status.key,
-      };
-      if (location != null) body['location'] = location;
-      if (notes != null) body['notes'] = notes;
-      if (latitude != null) body['latitude'] = latitude;
-      if (longitude != null) body['longitude'] = longitude;
-
-      final response = await _apiClient.patch(
-        '/shipments/$shipmentId/status',
-        body: body,
-      );
-
-      return ShipmentResponse(
-        success: true,
-        message: response['message'] ?? 'Status updated successfully',
-        shipment: response['data'] != null 
-            ? Shipment.fromJson(response['data']) 
-            : null,
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
-    } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to update status: $e',
-      );
-    }
-  }
-
-  // ==================== Driver Assignment ====================
-
-  /// Assign driver to shipment
-  Future<ShipmentResponse> assignDriver({
-    required String shipmentId,
-    required String driverId,
-  }) async {
-    try {
-      final response = await _apiClient.post(
-        '/shipments/$shipmentId/assign',
-        body: {'driver_id': driverId},
-      );
-
-      return ShipmentResponse(
-        success: true,
-        message: response['message'] ?? 'Driver assigned successfully',
-        shipment: response['data'] != null 
-            ? Shipment.fromJson(response['data']) 
-            : null,
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
-    } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to assign driver: $e',
-      );
-    }
-  }
-
-  /// Unassign driver from shipment
-  Future<ShipmentResponse> unassignDriver(String shipmentId) async {
-    try {
-      final response = await _apiClient.post(
-        '/shipments/$shipmentId/unassign',
-      );
-
-      return ShipmentResponse(
-        success: true,
-        message: response['message'] ?? 'Driver unassigned successfully',
-        shipment: response['data'] != null 
-            ? Shipment.fromJson(response['data']) 
-            : null,
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
-    } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to unassign driver: $e',
-      );
-    }
-  }
-
-  // ==================== Driver Location ====================
-
-  /// Get driver location
-  Future<ShipmentResponse> getDriverLocation(String driverId) async {
-    try {
-      final response = await _apiClient.get('/drivers/$driverId/location');
-
-      return ShipmentResponse(
-        success: true,
-        driverLocation: response['data'],
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
-    } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to get driver location: $e',
-      );
-    }
-  }
-
-  /// Update driver location (for drivers)
-  Future<ShipmentResponse> updateDriverLocation({
-    required double latitude,
-    required double longitude,
-  }) async {
-    try {
-      final response = await _apiClient.post(
-        '/drivers/location',
-        body: {
-          'latitude': latitude,
-          'longitude': longitude,
-        },
-      );
-
-      return ShipmentResponse(
-        success: true,
-        message: response['message'] ?? 'Location updated',
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
-    } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to update location: $e',
-      );
-    }
-  }
-
-  // ==================== Delete ====================
-
-  /// Delete shipment
-  Future<ShipmentResponse> deleteShipment(String shipmentId) async {
-    try {
-      final response = await _apiClient.delete('/shipments/$shipmentId');
-
-      return ShipmentResponse(
-        success: true,
-        message: response['message'] ?? 'Shipment deleted successfully',
-      );
-    } on ApiException catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: e.message,
-      );
-    } catch (e) {
-      return ShipmentResponse(
-        success: false,
-        message: 'Failed to delete shipment: $e',
-      );
+      throw Exception('Error tracking shipment: $e');
     }
   }
 }
