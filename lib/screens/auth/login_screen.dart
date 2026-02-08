@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -159,6 +160,23 @@ class _LoginScreenState extends State<LoginScreen> {
                     // TODO: Navigate to forgot password
                   },
                   child: const Text('نسيت كلمة المرور؟'),
+                ),
+                const SizedBox(height: 24),
+                
+                // Register
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('ليس لديك حساب؟'),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                        );
+                      },
+                      child: const Text('سجل الآن'),
+                    ),
+                  ],
                 ),
               ],
             ),
