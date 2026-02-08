@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart';
+import '../home_screen.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import '../main.dart';
+import 'home_screen.dart';
 
 /// Screen shown when location permission is denied or GPS is disabled.
 /// Blocks access to the app until location services are enabled.
