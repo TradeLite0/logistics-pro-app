@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../../utils/app_helpers.dart';
+import '../../models/user_model.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({Key? key}) : super(key: key);
@@ -155,25 +156,5 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } catch (e) {
       // Error is already handled in provider
     }
-  }
-}
-
-class UserProfileUpdateRequest {
-  final String? name;
-  final String? phone;
-  final String? email;
-
-  UserProfileUpdateRequest({
-    this.name,
-    this.phone,
-    this.email,
-  });
-
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = {};
-    if (name != null) data['name'] = name;
-    if (phone != null) data['phone'] = phone;
-    if (email != null) data['email'] = email;
-    return data;
   }
 }
